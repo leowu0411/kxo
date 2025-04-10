@@ -14,6 +14,26 @@
 #define XO_DEVICE_FILE "/dev/kxo"
 #define XO_DEVICE_ATTR_FILE "/sys/class/kxo/kxo/kxo_state"
 
+/* Draw the board into draw_buffer */
+static int draw_board(char *table, char *draw_buffer)
+{
+    int i = 0, k = 0;
+    draw_buffer[i++] = '\n';
+    draw_buffer[i++] = '\n';
+
+    while (i < DRAWBUFFER_SIZE) {
+        for (int j = 0; j < (BOARD_SIZE << 1) - 1 && k < N_GRIDS; j++) {
+            draw_buffer[i++] = j & 1 ? '|' : table[k++];
+        }
+        draw_buffer[i++] = '\n';
+        for (int j = 0; j < (BOARD_SIZE << 1) - 1; j++) {
+            draw_buffer[i++] = '-';
+        }
+        draw_buffer[i++] = '\n';
+    }
+    return 0;
+}
+
 static bool status_check(void)
 {
     FILE *fp = fopen(XO_STATUS_FILE, "r");
@@ -91,6 +111,7 @@ int main(int argc, char *argv[])
     int flags = fcntl(STDIN_FILENO, F_GETFL, 0);
     fcntl(STDIN_FILENO, F_SETFL, flags | O_NONBLOCK);
 
+    static char table[N_GRIDS];
     char display_buf[DRAWBUFFER_SIZE];
 
     fd_set readset;
@@ -116,7 +137,8 @@ int main(int argc, char *argv[])
         } else if (read_attr && FD_ISSET(device_fd, &readset)) {
             FD_CLR(device_fd, &readset);
             printf("\033[H\033[J"); /* ASCII escape code to clear the screen */
-            read(device_fd, display_buf, DRAWBUFFER_SIZE);
+            read(device_fd, table, N_GRIDS);
+            draw_board(table, display_buf);
             printf("%s", display_buf);
         }
     }
