@@ -7,3 +7,4 @@
 *.cmd
 *.symvers
 xo-user
+.vscode/settings.json
