@@ -12,6 +12,7 @@
 #include <linux/workqueue.h>
 
 #include "game.h"
+#include "kxo_pkg.h"
 #include "mcts.h"
 #include "negamax.h"
 
@@ -42,6 +43,11 @@ struct kxo_attr {
 };
 
 static struct kxo_attr attr_obj;
+static struct package pkg_obj = {
+    .ai = ' ',
+    .move = -1,
+    .end = '0',
+};
 
 static ssize_t kxo_state_show(struct device *dev,
                               struct device_attribute *attr,
@@ -110,9 +116,10 @@ static char table[N_GRIDS];
 /* Insert the whole chess board into the kfifo buffer */
 static void produce_board(void)
 {
-    unsigned int len = kfifo_in(&rx_fifo, table, sizeof(table));
-    if (unlikely(len < sizeof(table)) && printk_ratelimit())
-        pr_warn("%s: %zu bytes dropped\n", __func__, sizeof(table) - len);
+    unsigned int len =
+        kfifo_in(&rx_fifo, (const unsigned char *) &pkg_obj, sizeof(pkg_obj));
+    if (unlikely(len < sizeof(pkg_obj)) && printk_ratelimit())
+        pr_warn("%s: %zu bytes dropped\n", __func__, sizeof(pkg_obj) - len);
 
     pr_debug("kxo: %s: in %u/%u bytes\n", __func__, len, kfifo_len(&rx_fifo));
 }
@@ -183,6 +190,8 @@ static void ai_one_work_func(struct work_struct *w)
 
     WRITE_ONCE(turn, 'X');
     WRITE_ONCE(finish, 1);
+    WRITE_ONCE(pkg_obj.ai, 'O');
+    WRITE_ONCE(pkg_obj.move, move);
     smp_wmb();
     mutex_unlock(&producer_lock);
     tv_end = ktime_get();
@@ -217,6 +226,8 @@ static void ai_two_work_func(struct work_struct *w)
 
     WRITE_ONCE(turn, 'O');
     WRITE_ONCE(finish, 1);
+    WRITE_ONCE(pkg_obj.ai, 'X');
+    WRITE_ONCE(pkg_obj.move, move);
     smp_wmb();
     mutex_unlock(&producer_lock);
     tv_end = ktime_get();
@@ -314,10 +325,12 @@ static void timer_handler(struct timer_list *__timer)
             int cpu = get_cpu();
             pr_info("kxo: [CPU#%d] Drawing final board\n", cpu);
             put_cpu();
-
             /* Store data to the kfifo buffer */
             mutex_lock(&consumer_lock);
+            WRITE_ONCE(pkg_obj.end, '1');
             produce_board();
+            WRITE_ONCE(pkg_obj.end, '0');
+            WRITE_ONCE(pkg_obj.move, -1);
             mutex_unlock(&consumer_lock);
 
             wake_up_interruptible(&rx_wait);

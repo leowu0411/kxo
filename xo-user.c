@@ -9,6 +9,8 @@
 #include <unistd.h>
 
 #include "game.h"
+#include "kxo_pkg.h"
+
 
 #define XO_STATUS_FILE "/sys/module/kxo/initstate"
 #define XO_DEVICE_FILE "/dev/kxo"
@@ -113,7 +115,7 @@ int main(int argc, char *argv[])
 
     static char table[N_GRIDS];
     char display_buf[DRAWBUFFER_SIZE];
-
+    static struct package pkg_obj;
     fd_set readset;
     int device_fd = open(XO_DEVICE_FILE, O_RDONLY);
     int max_fd = device_fd > STDIN_FILENO ? device_fd : STDIN_FILENO;
@@ -137,7 +139,10 @@ int main(int argc, char *argv[])
         } else if (read_attr && FD_ISSET(device_fd, &readset)) {
             FD_CLR(device_fd, &readset);
             printf("\033[H\033[J"); /* ASCII escape code to clear the screen */
-            read(device_fd, table, N_GRIDS);
+            read(device_fd, &pkg_obj, sizeof(pkg_obj));
+            if (pkg_obj.move == -1)
+                continue;
+            table[pkg_obj.move] = pkg_obj.ai;
             draw_board(table, display_buf);
             printf("%s", display_buf);
         }
