@@ -404,6 +404,7 @@ static int kxo_release(struct inode *inode, struct file *filp)
         del_timer_sync(&timer);
         flush_workqueue(kxo_workqueue);
         fast_buf_clear();
+        attr_obj.end = '0';
     }
     pr_info("release, current cnt: %d\n", atomic_read(&open_cnt));
 
