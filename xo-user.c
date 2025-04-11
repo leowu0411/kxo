@@ -10,11 +10,15 @@
 
 #include "game.h"
 #include "kxo_pkg.h"
-
+#include "record_queue.h"
 
 #define XO_STATUS_FILE "/sys/module/kxo/initstate"
 #define XO_DEVICE_FILE "/dev/kxo"
 #define XO_DEVICE_ATTR_FILE "/sys/class/kxo/kxo/kxo_state"
+
+static int move_record[N_GRIDS];
+static int move_count = 0;
+static struct list_head *head;
 
 /* Draw the board into draw_buffer */
 static int draw_board(char *table, char *draw_buffer)
@@ -104,11 +108,38 @@ static void listen_keyboard_handler(void)
     close(attr_fd);
 }
 
+static inline void record_move(int move)
+{
+    move_record[move_count++] = move;
+}
+
+void record_to_queue(char winner)
+{
+    if (move_count == 0)
+        return;
+    if (!q_insert_head(head, move_record, move_count, winner)) {
+        perror("Failed to insert move into queue");
+        return;
+    }
+    move_count = 0;
+}
+
+static void print_moves(const int *record, int count)
+{
+    printf("Moves: ");
+    for (int i = 0; i < count; i++) {
+        printf("%c%d", 'A' + GET_COL(record[i]), 1 + GET_ROW(record[i]));
+        if (i < count - 1) {
+            printf(" -> ");
+        }
+    }
+    printf("\n");
+}
+
 int main(int argc, char *argv[])
 {
     if (!status_check())
         exit(1);
-
     raw_mode_enable();
     int flags = fcntl(STDIN_FILENO, F_GETFL, 0);
     fcntl(STDIN_FILENO, F_SETFL, flags | O_NONBLOCK);
@@ -116,6 +147,12 @@ int main(int argc, char *argv[])
     static char table[N_GRIDS];
     char display_buf[DRAWBUFFER_SIZE];
     static struct package pkg_obj;
+    head = q_new();
+    if (!head) {
+        printf("Failed to create queue\n");
+        exit(1);
+    }
+
     fd_set readset;
     int device_fd = open(XO_DEVICE_FILE, O_RDONLY);
     int max_fd = device_fd > STDIN_FILENO ? device_fd : STDIN_FILENO;
@@ -132,22 +169,37 @@ int main(int argc, char *argv[])
             printf("Error with select system call\n");
             exit(1);
         }
-
         if (FD_ISSET(STDIN_FILENO, &readset)) {
             FD_CLR(STDIN_FILENO, &readset);
             listen_keyboard_handler();
-        } else if (read_attr && FD_ISSET(device_fd, &readset)) {
+        } else if (FD_ISSET(device_fd, &readset)) {
             FD_CLR(device_fd, &readset);
-            printf("\033[H\033[J"); /* ASCII escape code to clear the screen */
             read(device_fd, &pkg_obj, sizeof(pkg_obj));
-            if (pkg_obj.move == -1)
+            if (pkg_obj.move == -1 && pkg_obj.end != '1')
                 continue;
-            table[pkg_obj.move] = pkg_obj.ai;
-            draw_board(table, display_buf);
-            printf("%s", display_buf);
+            if (pkg_obj.move != -1) {
+                table[pkg_obj.move] = pkg_obj.ai;
+                record_move(pkg_obj.move);
+            }
+            if (read_attr) {
+                printf(
+                    "\033[H\033[J"); /* ASCII escape code to clear the screen */
+                draw_board(table, display_buf);
+                printf("%s", display_buf);
+            }
+            if (pkg_obj.end == '1') {
+                record_to_queue(pkg_obj.ai);
+                memset(table, ' ', N_GRIDS);
+            }
         }
     }
 
+    element_t *entry = NULL, *safe = NULL;
+    list_for_each_entry_safe(entry, safe, head, list) {
+        print_moves(entry->value, entry->len);
+        printf("\"%c\" Win!\n", entry->ai);
+    }
+    q_free(head);
     raw_mode_disable();
     fcntl(STDIN_FILENO, F_SETFL, flags);
 

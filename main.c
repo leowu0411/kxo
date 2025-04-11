@@ -101,11 +101,6 @@ static DECLARE_WAIT_QUEUE_HEAD(rx_wait);
 /* Mutex to serialize kfifo writers within the workqueue handler */
 static DEFINE_MUTEX(producer_lock);
 
-/* Mutex to serialize fast_buf consumers: we can use a mutex because consumers
- * run in workqueue handler (kernel thread context).
- */
-static DEFINE_MUTEX(consumer_lock);
-
 /* We use an additional "faster" circular buffer to quickly store data from
  * interrupt context, before adding them to the kfifo.
  */
@@ -156,9 +151,10 @@ static void drawboard_work_func(struct work_struct *w)
     read_unlock(&attr_obj.lock);
 
     /* Store data to the kfifo buffer */
-    mutex_lock(&consumer_lock);
+    mutex_lock(&producer_lock);
     produce_board();
-    mutex_unlock(&consumer_lock);
+    WRITE_ONCE(pkg_obj.move, -1);
+    mutex_unlock(&producer_lock);
 
     wake_up_interruptible(&rx_wait);
 }
@@ -321,20 +317,18 @@ static void timer_handler(struct timer_list *__timer)
         mod_timer(&timer, jiffies + msecs_to_jiffies(delay));
     } else {
         read_lock(&attr_obj.lock);
-        if (attr_obj.display == '1') {
-            int cpu = get_cpu();
-            pr_info("kxo: [CPU#%d] Drawing final board\n", cpu);
-            put_cpu();
-            /* Store data to the kfifo buffer */
-            mutex_lock(&consumer_lock);
-            WRITE_ONCE(pkg_obj.end, '1');
-            produce_board();
-            WRITE_ONCE(pkg_obj.end, '0');
-            WRITE_ONCE(pkg_obj.move, -1);
-            mutex_unlock(&consumer_lock);
+        int cpu = get_cpu();
+        pr_info("kxo: [CPU#%d] Drawing final board\n", cpu);
+        put_cpu();
+        /* Store data to the kfifo buffer */
+        mutex_lock(&producer_lock);
+        WRITE_ONCE(pkg_obj.end, '1');
+        produce_board();
+        WRITE_ONCE(pkg_obj.end, '0');
+        WRITE_ONCE(pkg_obj.move, -1);
+        mutex_unlock(&producer_lock);
 
-            wake_up_interruptible(&rx_wait);
-        }
+        wake_up_interruptible(&rx_wait);
 
         if (attr_obj.end == '0') {
             memset(table, ' ',
