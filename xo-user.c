@@ -175,10 +175,10 @@ int main(int argc, char *argv[])
         } else if (FD_ISSET(device_fd, &readset)) {
             FD_CLR(device_fd, &readset);
             read(device_fd, &pkg_obj, sizeof(pkg_obj));
-            if (pkg_obj.move == -1 && pkg_obj.end != '1')
+            if (pkg_obj.move == -1 && !PKG_GET_END(pkg_obj.val))
                 continue;
             if (pkg_obj.move != -1) {
-                table[pkg_obj.move] = pkg_obj.ai;
+                table[pkg_obj.move] = PKG_GET_AI(pkg_obj.val);
                 record_move(pkg_obj.move);
             }
             if (read_attr) {
@@ -187,8 +187,8 @@ int main(int argc, char *argv[])
                 draw_board(table, display_buf);
                 printf("%s", display_buf);
             }
-            if (pkg_obj.end == '1') {
-                record_to_queue(pkg_obj.ai);
+            if (PKG_GET_END(pkg_obj.val)) {
+                record_to_queue(PKG_GET_AI(pkg_obj.val));
                 memset(table, ' ', N_GRIDS);
             }
         }

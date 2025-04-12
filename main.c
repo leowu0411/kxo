@@ -44,9 +44,8 @@ struct kxo_attr {
 
 static struct kxo_attr attr_obj;
 static struct package pkg_obj = {
-    .ai = ' ',
+    .val = ' ',
     .move = -1,
-    .end = '0',
 };
 
 static ssize_t kxo_state_show(struct device *dev,
@@ -186,7 +185,7 @@ static void ai_one_work_func(struct work_struct *w)
 
     WRITE_ONCE(turn, 'X');
     WRITE_ONCE(finish, 1);
-    WRITE_ONCE(pkg_obj.ai, 'O');
+    WRITE_ONCE(pkg_obj.val, PKG_PUT_AI(pkg_obj, 'O'));
     WRITE_ONCE(pkg_obj.move, move);
     smp_wmb();
     mutex_unlock(&producer_lock);
@@ -222,7 +221,7 @@ static void ai_two_work_func(struct work_struct *w)
 
     WRITE_ONCE(turn, 'O');
     WRITE_ONCE(finish, 1);
-    WRITE_ONCE(pkg_obj.ai, 'X');
+    WRITE_ONCE(pkg_obj.val, PKG_PUT_AI(pkg_obj, 'X'));
     WRITE_ONCE(pkg_obj.move, move);
     smp_wmb();
     mutex_unlock(&producer_lock);
@@ -322,9 +321,9 @@ static void timer_handler(struct timer_list *__timer)
         put_cpu();
         /* Store data to the kfifo buffer */
         mutex_lock(&producer_lock);
-        WRITE_ONCE(pkg_obj.end, '1');
+        WRITE_ONCE(pkg_obj.val, PKG_SET_END(pkg_obj));
         produce_board();
-        WRITE_ONCE(pkg_obj.end, '0');
+        WRITE_ONCE(pkg_obj.val, PKG_CLR_END(pkg_obj));
         WRITE_ONCE(pkg_obj.move, -1);
         mutex_unlock(&producer_lock);
 
