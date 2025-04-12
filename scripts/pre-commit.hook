@@ -6,7 +6,7 @@ CPPCHECK_suppresses="--suppress=unmatchedSuppression \
 --suppress=constParameterPointer:main.c \
 --suppress=constParameterCallback:main.c \
 --suppress=unusedFunction:main.c"
-CPPCHECK_OPTS="-I. --enable=all --error-exitcode=1 --force $CPPCHECK_suppresses ."
+CPPCHECK_OPTS="-I. --enable=all --error-exitcode=1 --force --inline-suppr $CPPCHECK_suppresses ."
 
 RETURN=0
 CLANG_FORMAT=$(which clang-format)

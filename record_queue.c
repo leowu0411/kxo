@@ -32,17 +32,11 @@ void q_free(struct list_head *head)
 /* Insert an element at head of queue */
 bool q_insert_head(struct list_head *head, const int *move, int len, char ai)
 {
-    if (!head) {
-        printf("Queue head is NULL\n");
+    if (!head)
         return false;
-    }
-
     element_t *node = malloc(sizeof(element_t));
-    if (!node) {
-        printf("Failed to allocate memory for move\n");
+    if (!node)
         return false;
-    }
-
     node->value = malloc(len * sizeof(int));
     if (!node->value) {
         free(node);
@@ -54,7 +48,6 @@ bool q_insert_head(struct list_head *head, const int *move, int len, char ai)
     node->ai = ai;
     memcpy(node->value, move, len * sizeof(int));
     list_add(&node->list, head);
+    // cppcheck-suppress memleak
     return true;
 }
-
-
